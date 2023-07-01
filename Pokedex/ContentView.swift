@@ -1,21 +1,9 @@
-//
-//  ContentView.swift
-//  Pokedex
-//
-//  Created by Johnfil Initan on 6/29/23.
-//
-
+import Alamofire
 import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundColor(.accentColor)
-            Text("Hello, world!")
-        }
-        .padding()
+        PokedexView()
     }
 }
 

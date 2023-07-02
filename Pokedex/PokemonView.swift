@@ -1,64 +1,52 @@
 import Alamofire
+import PokemonAPI
 import SwiftUI
 
 struct PokemonView: View {
     
+    //Parameters
     let pokemon: [Pokemon]
     @State var currentPokemonIndex: Int
-    
-    @State private var randomizedIndex = 0
-    
+        
+    //Timer variables
     @State private var isLoading = true
     @State private var timerIndex = 0
     @State private var timer: Timer?
     
-    @State private var pokemonSpecies: PokemonSpecies?
-    
+    //Carousel variables
     @State private var panelOffset: CGFloat = 0
     @State private var dragOffset: CGFloat = 0
     @GestureState private var translation = CGSize.zero
     @Environment(\.presentationMode) var presentationMode
+    
+    //PokeAPI variables
+    @State private var pokemonSpecies: PokemonSpecies?
+    @State private var pokemonName = ""
+    @State private var pokemonGenus = "T"
+    @State private var pokemonFlavorText = ""
+
     
     var body: some View {
         let pokemonIndex = currentPokemonIndex
         
         VStack {
             VStack {
-                if let species = pokemonSpecies {
-                    Text(species.name.capitalized)
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 24)
-                } else {
-                    Text("Loading name...")
-                        .font(.body)
-                        .italic()
-                        .lineLimit(3)
-                        .minimumScaleFactor(0.5)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 24)
-                }
+                Text(pokemonName.capitalized.isEmpty ? "???" : pokemonName.capitalized)
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
                 
-                if let species = pokemonSpecies {
-                    Text(species.genera.first?.genus ?? "???")
-                        .font(.body)
-                        .italic()
-                        .lineLimit(3)
-                        .minimumScaleFactor(0.5)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 24)
-                } else {
-                    Text("Loading species...")
-                        .font(.body)
-                        .italic()
-                        .lineLimit(3)
-                        .minimumScaleFactor(0.5)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 24)
-                }
+                Text(pokemonGenus.capitalized.isEmpty ? "???" : pokemonGenus.capitalized)
+                    .font(.body)
+                    .italic()
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
+        
             }
             .padding(.top, -15)
             
@@ -118,33 +106,25 @@ struct PokemonView: View {
                         .foregroundColor(.black)
                 }
                 .padding(.bottom, 10)
-                
-                if let species = pokemonSpecies {
-                    Text(species.flavorTextEntries.first?.flavorText ?? "???")
-                        .font(.title)
-                        .lineLimit(3)
-                        .multilineTextAlignment(.center)
-                        .minimumScaleFactor(0.5)
-                        .padding(.horizontal, 24)
-                        .frame(width: 420, height: 80) // Adjust the width and height as needed
-                } else {
-                    Text("Loading flavor text...")
-                        .font(.body)
-                        .lineLimit(3)
-                        .minimumScaleFactor(0.5)
-                        .padding(.horizontal, 24)
-                        .frame(width: 400, height: 80) // Adjust the width and height as needed
-                }
+                Text(pokemonFlavorText.capitalized.isEmpty ? "???" : pokemonFlavorText.capitalized)                        .font(.title)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.5)
+                    .padding(.horizontal, 24)
+                    .frame(width: 420, height: 80)
             }
             .padding(.top, -15)
         }
         .onChange(of: pokemonIndex) { _ in
             startTimer()
-            fetchPokemonSpecies()
+            fetchPokemon()
+
+            //fetchPokemonSpecies()
         }
         .onAppear {
             startTimer()
-            fetchPokemonSpecies()
+            fetchPokemon()
+            //fetchPokemonSpecies()
         }
         .navigationBarTitleDisplayMode(.inline)
         .edgesIgnoringSafeArea(.top)
@@ -156,6 +136,7 @@ struct PokemonView: View {
                 // Randomize the currentPokemonIndex
                 currentPokemonIndex = Int.random(in: 0..<pokemon.count)
                 print("Current Pokemon Index", currentPokemonIndex)
+                fetchPokemon()
             }) {
                 Image(systemName: "shuffle")
             }
@@ -215,44 +196,24 @@ struct PokemonView: View {
         }
     }
     
-    func fetchPokemonSpecies() {
-        guard let url = URL(string: "https://pokeapi.co/api/v2/pokemon-species/\(currentPokemonIndex+1)") else {
-            print("Invalid URL")
-            return
-        }
-        
-        AF.request(url)
-            .validate()
-            .responseDecodable(of: PokemonSpecies.self) { response in
-                switch response.result {
-                case .success(let species):
-                    let englishSpecies = getEnglishLanguageSpecies(from: species)
-                    pokemonSpecies = englishSpecies
-                case .failure(let error):
-                    print("Error fetching Pokemon species:", error)
+    func fetchPokemon() {
+        let api = PokemonAPI()
+        api.pokemonService.fetchPokemonSpecies(currentPokemonIndex + 1) { result in
+            switch result {
+            case .success(let poke):
+                if let name = poke.name {
+                    pokemonName = name
                 }
+                if let genus = poke.flavorTextEntries?.first(where: { $0.language?.name == "en" })?.flavorText {
+                    pokemonGenus = genus
+                }
+                if let flavorText = poke.genera?.first(where: { $0.language?.name == "en" })?.genus {
+                    pokemonGenus = flavorText
+                }
+            case .failure(let error):
+                print(error.localizedDescription)
             }
-    }
-
-    func getEnglishLanguageSpecies(from species: PokemonSpecies) -> PokemonSpecies {
-        var versionId = 15
-        var flavorTextEntries: [FlavorTextEntry]
-        
-        // Loop through the version IDs starting from 40
-        repeat {
-            let versionUrl = "https://pokeapi.co/api/v2/version/\(versionId)/"
-            flavorTextEntries = species.flavorTextEntries.filter { $0.language.name == "en" && $0.version.url == versionUrl }
-            
-            // Break the loop if non-empty flavor text entries found
-            if !flavorTextEntries.isEmpty {
-                break
-            }
-            
-            versionId += 2 // Increase the version ID by 5 for the next iteration
-        } while versionId <= 42 // Continue until version ID is not more than 40
-        
-        let genera = species.genera.filter { $0.language.name == "en" }
-        return PokemonSpecies(name: species.name, flavorTextEntries: flavorTextEntries, genera: genera)
+        }
     }
 }
 

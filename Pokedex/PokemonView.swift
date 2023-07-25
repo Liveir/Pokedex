@@ -8,7 +8,8 @@ struct PokemonView: View {
     let pokemon: [Pokemon]
     @State var currentPokemonIndex: Int
         
-    //Timer variables
+    //State variables
+    @State private var shuffleButtonPressed = false
     @State private var isLoading = true
     @State private var timerIndex = 0
     @State private var timer: Timer?
@@ -22,22 +23,47 @@ struct PokemonView: View {
     //PokeAPI variables
     @State private var pokemonSpecies: PokemonSpecies?
     @State private var pokemonName = ""
-    @State private var pokemonGenus = "T"
+    @State private var pokemonGenus = ""
     @State private var pokemonFlavorText = ""
-
+    @State private var pokemonTypes: [String]?
     
     var body: some View {
         let pokemonIndex = currentPokemonIndex
+        let pkmnTypesColors = prepareBackgroundColors(types: pokemonTypes ?? [])
+        let pkmnTypesGradient = Gradient(colors: pkmnTypesColors)
+        let conicGradient = AngularGradient(gradient: pkmnTypesGradient, center: .center, startAngle: .degrees(120), endAngle: .degrees(420))
+
+        let mask = LinearGradient(gradient: Gradient(colors: [.black, .white]), startPoint: .top, endPoint: .bottom)
+
+        let viewBgColor = Color.clear
+            .background(conicGradient)
+            .mask(mask)
         
         VStack {
             VStack {
-                Text(pokemonName.capitalized.isEmpty ? "???" : pokemonName.capitalized)
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 24)
+                HStack {
+                    Text(pokemonName.capitalized.isEmpty ? "???" : pokemonName.capitalized)
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                        .frame(alignment: .leading)
+
+                    if let types = pokemonTypes {
+                        ForEach(types, id: \.self) { type in
+                            let color = PokemonTypeColorMap.colors[type] ?? .black
+                            Text(type.capitalized.isEmpty ? "???" : type.capitalized)
+                                .font(.subheadline)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .foregroundColor(.white)
+                                .background(color)
+                                .cornerRadius(8)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
                 
                 Text(pokemonGenus.capitalized.isEmpty ? "???" : pokemonGenus.capitalized)
                     .font(.body)
@@ -46,11 +72,11 @@ struct PokemonView: View {
                     .minimumScaleFactor(0.5)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 24)
-        
+
             }
             .padding(.top, -15)
             
-            AsyncImage(url: URL(string: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/\(pokemon[currentPokemonIndex].id).png")) { image in
+            AsyncImage(url: URL(string: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/\(pokemonIndex+1).png")) { image in
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -106,37 +132,56 @@ struct PokemonView: View {
                         .foregroundColor(.black)
                 }
                 .padding(.bottom, 10)
-                Text(pokemonFlavorText.capitalized.isEmpty ? "???" : pokemonFlavorText.capitalized)                        .font(.title)
-                    .lineLimit(3)
-                    .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.5)
-                    .padding(.horizontal, 24)
-                    .frame(width: 420, height: 80)
+                if let species = pokemonSpecies {
+                    Text(species.flavorTextEntries.first?.flavorText ?? "???")
+                        .font(.title)
+                        .lineLimit(4)
+                        .multilineTextAlignment(.center)
+                        .minimumScaleFactor(0.5)
+                        .padding(.horizontal, 24)
+                        .frame(width: 400, height: 80) // Adjust the width and height as needed
+                } else {
+                    Text("Loading flavor text...")
+                        .font(.body)
+                        .lineLimit(4)
+                        .minimumScaleFactor(0.5)
+                        .padding(.horizontal, 24)
+                        .frame(width: 400, height: 80) // Adjust the width and height as needed
+                }
             }
             .padding(.top, -15)
         }
+        .frame(maxHeight: .infinity)
+        .background(viewBgColor)
         .onChange(of: pokemonIndex) { _ in
             startTimer()
             fetchPokemon()
-
-            //fetchPokemonSpecies()
+            fetchPokemonSpecies()
+            fetchPokemonTypes()
         }
         .onAppear {
             startTimer()
             fetchPokemon()
-            //fetchPokemonSpecies()
+            fetchPokemonSpecies()
+            fetchPokemonTypes()
         }
         .navigationBarTitleDisplayMode(.inline)
         .edgesIgnoringSafeArea(.top)
-        .navigationBarTitle("")
         .navigationBarBackButtonHidden(true)
         .navigationBarItems(
             leading: backButton,
             trailing: Button(action: {
-                // Randomize the currentPokemonIndex
-                currentPokemonIndex = Int.random(in: 0..<pokemon.count)
-                print("Current Pokemon Index", currentPokemonIndex)
-                fetchPokemon()
+                if !shuffleButtonPressed {
+                    // Randomize the currentPokemonIndex
+                    currentPokemonIndex = Int.random(in: 0..<pokemon.count)
+                    print("Current Pokemon Index", currentPokemonIndex)
+                    fetchPokemon()
+                    shuffleButtonPressed = true
+                    
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        shuffleButtonPressed = false
+                    }
+                }
             }) {
                 Image(systemName: "shuffle")
             }
@@ -160,25 +205,29 @@ struct PokemonView: View {
                         }
                     }
             )
-
         )
-        VStack {
-            // Additional info content here
-        }
-        .offset(y: panelOffset)        
     }
+
     
     var backButton: some View {
         Button(action: {
             // Go back to PokedexView
             presentationMode.wrappedValue.dismiss()
         }) {
-            Image(systemName: "chevron.left")
+            ZStack {
+                Circle()
+                    .foregroundColor(Color.black.opacity(0.5))
+                    .frame(width: 44, height: 44)
+                
+                Image(systemName: "chevron.left")
+                    .foregroundColor(Color.white)
+                    .font(.system(size: 22, weight: .bold))
+            }
         }
     }
     
     func startTimer() {
-        let durationInSeconds: TimeInterval = 1
+        let durationInSeconds: TimeInterval = 0.2
         let targetValue: Int = currentPokemonIndex
         let desiredTimeInterval: TimeInterval = durationInSeconds / TimeInterval(abs(targetValue - timerIndex))
         //let iterations = Int(ceil(durationInSeconds / desiredTimeInterval))
@@ -204,16 +253,106 @@ struct PokemonView: View {
                 if let name = poke.name {
                     pokemonName = name
                 }
-                if let genus = poke.flavorTextEntries?.first(where: { $0.language?.name == "en" })?.flavorText {
-                    pokemonGenus = genus
+                if let flavorText = poke.flavorTextEntries?.first(where: { $0.language?.name == "en" })?.flavorText {
+                    pokemonFlavorText = flavorText
                 }
-                if let flavorText = poke.genera?.first(where: { $0.language?.name == "en" })?.genus {
-                    pokemonGenus = flavorText
+                if let genus = poke.genera?.first(where: { $0.language?.name == "en" })?.genus {
+                    pokemonGenus = genus
                 }
             case .failure(let error):
                 print(error.localizedDescription)
             }
         }
+    }
+    
+    func fetchPokemonTypes() {
+        guard let url = URL(string: "https://pokeapi.co/api/v2/pokemon/\(currentPokemonIndex+1)") else {
+            print("Invalid URL")
+            return
+        }
+        
+        AF.request(url)
+            .validate()
+            .responseDecodable(of: PokemonDetail.self) { response in
+                switch response.result {
+                case .success(let pokemonDetail):
+                    pokemonTypes = pokemonDetail.types.map { $0.type.name }
+                case .failure(let error):
+                    print("Error fetching Pokemon types:", error)
+                }
+            }
+    }
+    
+    //TEMPORARY FIX FOR FLAVOR TEXT TO MAKE FORMAT UNIFORM
+    func fetchPokemonSpecies() {
+        guard let url = URL(string: "https://pokeapi.co/api/v2/pokemon-species/\(currentPokemonIndex+1)") else {
+            print("Invalid URL")
+            return
+        }
+        
+        AF.request(url)
+            .validate()
+            .responseDecodable(of: PokemonSpecies.self) { response in
+                switch response.result {
+                case .success(let species):
+                    let englishSpecies = fetchFlavorTextVer (from: species)
+                    pokemonSpecies = englishSpecies
+                case .failure(let error):
+                    print("Error fetching Pokemon species:", error)
+                }
+            }
+    }
+    
+    func fetchFlavorTextVer (from species: PokemonSpecies) -> PokemonSpecies {
+        var versionId = 15
+        var flavorTextEntries: [FlavorTextEntry]
+        
+        // Loop through the version IDs starting from 40
+        repeat {
+            let versionUrl = "https://pokeapi.co/api/v2/version/\(versionId)/"
+            flavorTextEntries = species.flavorTextEntries.filter { $0.language.name == "en" && $0.version.url == versionUrl }
+            
+            // Break the loop if non-empty flavor text entries found
+            if !flavorTextEntries.isEmpty {
+                break
+            }
+            
+            versionId += 2 // Increase the version ID by 5 for the next iteration
+        } while versionId <= 42 // Continue until version ID is not more than 40
+        
+        let genera = species.genera.filter { $0.language.name == "en" }
+        return PokemonSpecies(name: species.name, flavorTextEntries: flavorTextEntries, genera: genera)
+    }
+    
+    func prepareBackgroundColors(types: [String]) -> [Color] {
+        var colors: [Color] = []
+        
+        if types.count == 1 {
+            let type = types[0]
+            if let color = PokemonTypeColorMap.colors[type] {
+                colors.append(.white)
+                colors.append(color.opacity(0.7))
+                colors.append(.white)
+            } else {
+                colors.append(.black)
+            }
+        } else if types.count == 2 {
+            let type1 = types[0]
+            let type2 = types[1]
+            
+            if let color1 = PokemonTypeColorMap.colors[type1], let color2 = PokemonTypeColorMap.colors[type2] {
+                colors.append(.white)
+                colors.append(color1.opacity(0.7))
+                colors.append(color2.opacity(0.7))
+                colors.append(.white)
+            } else {
+                colors.append(.black)
+                colors.append(.black)
+                colors.append(.black)
+            }
+        }
+        
+        return colors
     }
 }
 

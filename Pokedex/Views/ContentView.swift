@@ -1,4 +1,3 @@
-import Alamofire
 import SwiftUI
 
 struct ContentView: View {
